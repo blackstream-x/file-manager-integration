@@ -20,7 +20,9 @@ from tkinter import messagebox
 
 # local modules
 
+from file_manager_integration import file_managers
 from file_manager_integration import gui
+from file_manager_integration import __version__
 
 
 #
@@ -34,8 +36,8 @@ COPYRIGHT_NOTICE = """Copyright (C) 2021 Rainer Schwarzbach
 
 This file is part of file_manager_integration.
 
-file_manager_integration is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+file_manager_integration is free software: you can redistribute it and/or
+modify it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
@@ -54,6 +56,8 @@ BUTTONS_GRID_W = dict(padx=3, pady=3, sticky=tkinter.W)
 BUTTONS_GRID_E = dict(padx=3, pady=3, sticky=tkinter.E)
 GRID_FULLWIDTH = dict(padx=4, pady=2, sticky=tkinter.E + tkinter.W)
 WITH_BORDER = dict(borderwidth=2, padx=5, pady=5, relief=tkinter.GROOVE)
+
+IMPLEMENTED_FILE_MANAGERS = (file_managers.Nautilus, file_managers.Nemo)
 
 
 #
@@ -153,61 +157,21 @@ class Panels(InterfacePlugin):
 
     """Panel and panel component methods"""
 
-    ...
-
-
-class Validator(InterfacePlugin):
-
-    """Validator class for checking untrusted user settings"""
-
-    def __init__(self, application):
-        """Initialize results dict"""
-        super().__init__(application)
-        self.results = dict(application.default_settings)
-
-    def validate(self, settings_map):
-        """Validate values from the settings map"""
-        for (key, value) in settings_map.items():
-            if key not in self.results:
-                logging.error("Ignored unsupported user setting %r", key)
-                continue
-            #
-            try:
-                checked = getattr(self, f"checked_{key}")
-            except AttributeError as error:
-                logging.critical(
-                    "Found a bug: %s - please file an issue!", error
-                )
-            try:
-                value = checked(value)
-            except ValueError as error:
-                logging.error(
-                    "Ignored invalid user setting for %r: %r (%s)",
-                    key,
-                    value,
-                    error,
-                )
-                continue
-            #
-            logging.debug("Read user setting %s: %r", key, value)
-            self.results[key] = value
-            #
-        #
-
-    @staticmethod
-    def must_be_in_collection(value, collection, message):
-        """Raise a ValueError if the value is not in the collection"""
-        if value not in collection:
-            raise ValueError(message)
-        #
+    def select_file_manager(self):
+        """Show the select_file_manager panel"""
+        ...
 
 
 class UserInterface:
 
     """GUI using tkinter"""
 
-    phase_open_file = "open_file"
-    phases = (phase_open_file,)
+    # phase_open_file = "open_file"
+    phase_select_fm = "select_file_manager"
+    phase_enter_vars = "enter_variables"
+    phase_show_result = "show_result"
+
+    phases = (phase_select_fm, phase_enter_vars, phase_show_result)
     panel_names = {}
     looped_panels = set()
 
@@ -216,22 +180,17 @@ class UserInterface:
     panel_class = Panels
     post_panel_action_class = InterfacePlugin
     rollback_class = InterfacePlugin
-    validator_class = Validator
 
     default_settings = {}
 
     script_name = "<module file_manager_integration.core>"
-    version = "<version>"
+    version = __version__
     homepage = HOMEPAGE
     copyright_notice = COPYRIGHT_NOTICE
 
     file_type = "image file"
 
-    def __init__(
-        self,
-        # file_path,
-        options,
-    ):
+    def __init__(self, options):
         """Build the GUI"""
         self.options = options
         self.main_window = tkinter.Tk()
@@ -239,6 +198,7 @@ class UserInterface:
         self.vars = Namespace(
             current_panel=None,
             errors=[],
+            capabilities={},
             panel_stack=[],
             post_panel_methods={},
             user_settings=Namespace(),
@@ -265,24 +225,22 @@ class UserInterface:
         self.tkvars.update(
             file_name=tkinter.StringVar(),
             show_preview=tkinter.IntVar(),
+            scripts={},
+            actions={}
         )
-        self.additional_variables()
-        self.additional_widgets()
-        self.open_file(keep_existing=True, quit_on_empty_choice=True)
+        for file_manager_cls in IMPLEMENTED_FILE_MANAGERS:
+            capabilities = file_manager_cls.capabilities
+            if file_managers.ACTIONS in capabilities:
+                self.tkvars.actions[file_manager_cls.name] = tkinter.IntVar()
+            #
+            if file_managers.SCRIPTS in capabilities:
+                self.tkvars.scripts[file_manager_cls.name] = tkinter.IntVar()
+            #
+            self.vars.capabilities[file_manager_cls.name] = capabilities
+        #
+        self.jump_to_panel(self.phase_select_fm)
         self.main_window.protocol("WM_DELETE_WINDOW", self.quit)
         self.main_window.mainloop()
-
-    def additional_variables(self):
-        """Subclass-specific post-initialization
-        (additional variables)
-        """
-        raise NotImplementedError
-
-    def additional_widgets(self):
-        """Subclass-specific post-initialization
-        (additional widgets)
-        """
-        raise NotImplementedError
 
     def execute_post_panel_action(self):
         """Execute the post panel action for the current panel"""
@@ -297,83 +255,88 @@ class UserInterface:
             method()
         #
 
-    def open_file(
-        self, keep_existing=False, preset_path=None, quit_on_empty_choice=False
-    ):
-        """Open a file via file dialog"""
-        self.vars.update(current_panel=self.phase_open_file)
-        file_path = self.vars.original_path
-        if preset_path:
-            if not preset_path.is_dir():
-                initial_dir = str(preset_path.parent)
-            #
-        elif file_path:
-            initial_dir = str(file_path.parent)
-        else:
-            initial_dir = os.getcwd()
-        #
-        while True:
-            if not keep_existing or file_path is None:
-                self.vars.update(disable_key_events=True)
-                selected_file = filedialog.askopenfilename(
-                    initialdir=initial_dir,
-                    parent=self.main_window,
-                    title=f"Load a {self.file_type}",
-                )
-                self.vars.update(disable_key_events=False)
-                if not selected_file:
-                    if quit_on_empty_choice:
-                        self.quit()
-                    #
-                    return
-                #
-                file_path = pathlib.Path(selected_file)
-            #
-            # check for a supported file type,
-            # and show an error dialog and retry
-            # if the selected file is not an image
-            if not self.check_file_type(file_path):
-                messagebox.showerror(
-                    "Unsupported file type",
-                    f"{file_path.name!r} is not a supported file.",
-                    icon=messagebox.ERROR,
-                )
-                initial_dir = str(file_path.parent)
-                file_path = None
-                continue
-            #
-            if self.vars.unapplied_changes or self.vars.undo_buffer:
-                confirmation = messagebox.askokcancel(
-                    "Unsaved Changes",
-                    "Discard the chages made to"
-                    f" {self.vars.original_path.name!r}?",
-                    icon=messagebox.WARNING,
-                )
-                if not confirmation:
-                    return
-                #
-            #
-            # Set original_path and read image data
-            try:
-                self.load_file(file_path)
-            except (OSError, ValueError) as error:
-                messagebox.showerror(
-                    "Load error", str(error), icon=messagebox.ERROR
-                )
-                initial_dir = str(file_path.parent)
-                file_path = None
-                continue
-            #
-            break
-        #
-        self.vars.undo_buffer.clear()
-        self.next_panel()
+# =============================================================================
+#     def open_file(
+#         self, keep_existing=False, preset_path=None, quit_on_empty_choice=False
+#     ):
+#         """Open a file via file dialog"""
+#         self.vars.update(current_panel=self.phase_open_file)
+#         file_path = self.vars.original_path
+#         if preset_path:
+#             if not preset_path.is_dir():
+#                 initial_dir = str(preset_path.parent)
+#             #
+#         elif file_path:
+#             initial_dir = str(file_path.parent)
+#         else:
+#             initial_dir = os.getcwd()
+#         #
+#         while True:
+#             if not keep_existing or file_path is None:
+#                 self.vars.update(disable_key_events=True)
+#                 selected_file = filedialog.askopenfilename(
+#                     initialdir=initial_dir,
+#                     parent=self.main_window,
+#                     title=f"Load a {self.file_type}",
+#                 )
+#                 self.vars.update(disable_key_events=False)
+#                 if not selected_file:
+#                     if quit_on_empty_choice:
+#                         self.quit()
+#                     #
+#                     return
+#                 #
+#                 file_path = pathlib.Path(selected_file)
+#             #
+#             # check for a supported file type,
+#             # and show an error dialog and retry
+#             # if the selected file is not an image
+#             if not self.check_file_type(file_path):
+#                 messagebox.showerror(
+#                     "Unsupported file type",
+#                     f"{file_path.name!r} is not a supported file.",
+#                     icon=messagebox.ERROR,
+#                 )
+#                 initial_dir = str(file_path.parent)
+#                 file_path = None
+#                 continue
+#             #
+#             if self.vars.unapplied_changes or self.vars.undo_buffer:
+#                 confirmation = messagebox.askokcancel(
+#                     "Unsaved Changes",
+#                     "Discard the chages made to"
+#                     f" {self.vars.original_path.name!r}?",
+#                     icon=messagebox.WARNING,
+#                 )
+#                 if not confirmation:
+#                     return
+#                 #
+#             #
+#             # Set original_path and read image data
+#             try:
+#                 self.load_file(file_path)
+#             except (OSError, ValueError) as error:
+#                 messagebox.showerror(
+#                     "Load error", str(error), icon=messagebox.ERROR
+#                 )
+#                 initial_dir = str(file_path.parent)
+#                 file_path = None
+#                 continue
+#             #
+#             break
+#         #
+#         self.vars.undo_buffer.clear()
+#         self.next_panel()
+#
+# =============================================================================
 
-    def check_file_type(self, file_path):
-        """Return True if the file is a supported file,
-        False if not
-        """
-        raise NotImplementedError
+# =============================================================================
+#     def check_file_type(self, file_path):
+#         """Return True if the file is a supported file,
+#         False if not
+#         """
+#         raise NotImplementedError
+# =============================================================================
 
     def heading_with_help_button(
         self,
@@ -407,15 +370,17 @@ class UserInterface:
             sticky=tkinter.E,
         )
 
-    def load_file(self, file_path):
-        """Load the file"""
-        raise NotImplementedError
-
-    def save_file(self):
-        """Save as the selected file,
-        return True if the file was saved
-        """
-        raise NotImplementedError
+# =============================================================================
+#     def load_file(self, file_path):
+#         """Load the file"""
+#         raise NotImplementedError
+#
+#     def save_file(self):
+#         """Save as the selected file,
+#         return True if the file was saved
+#         """
+#         raise NotImplementedError
+# =============================================================================
 
     def jump_to_panel(self, panel_name):
         """Jump to the specified panel
@@ -494,35 +459,12 @@ class UserInterface:
         If this method of an inherited class returns False,
         the application will NOT exit,
         """
-        raise NotImplementedError
+        # raise NotImplementedError
+        return True
 
     def quit(self, event=None):
         """Save user settings and exit the application"""
         del event
-        try:
-            if not self.vars.settings_path.parent.is_dir():
-                self.vars.settings_path.parent.mkdir()
-            #
-        except (FileExistsError, FileNotFoundError) as error:
-            messagebox.showerror(
-                "Saving preferences failed",
-                f"Could not save preferences: {error}",
-                parent=self.main_window,
-                icon=messagebox.ERROR)
-        else:
-            with open(
-                self.vars.settings_path,
-                mode="wt",
-                encoding="utf-8",
-            ) as settings_file:
-                json.dump(
-                    self.vars.user_settings,
-                    settings_file,
-                    indent=2,
-                    sort_keys=True,
-                )
-            #
-        #
         if self.pre_quit_check():
             self.main_window.destroy()
         #

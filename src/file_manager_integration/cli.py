@@ -10,8 +10,8 @@ Copyright (C) 2021 Rainer Schwarzbach
 
 This file is part of file_manager_integration.
 
-file_manager_integration is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
+file_manager_integration is free software: you can redistribute it and/or
+modify it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
@@ -32,6 +32,7 @@ import logging
 import pathlib
 
 from file_manager_integration import core
+from file_manager_integration import __version__
 
 
 #
@@ -71,6 +72,11 @@ def __get_arguments():
         help="Limit message output to warnings and errors",
     )
     argument_parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Print version and exit",
+    )
+    argument_parser.add_argument(
         "file",
         type=pathlib.Path,
         nargs="?",
@@ -82,6 +88,10 @@ def __get_arguments():
 def main():
     """Main script function"""
     arguments = __get_arguments()
+    if arguments.version:
+        print(__version__)
+        return RETURNCODE_OK
+    #
     logging.basicConfig(
         format="%(levelname)-8s\u2551 %(message)s", level=arguments.loglevel
     )
