@@ -1,14 +1,18 @@
 # file-manager-integration
+
 File manager integration for scripts
 
 ## Supported file managers
 
-### planned 
+### implemented
 
-- Caja (MATE)
-- KDE file manager 
 - Nautilus (GNOME)
 - Nemo (Cinnamon)
+
+### planned support
+
+- Caja (MATE)
+- KDE file manager
 - PCManFM (LXDE)
 - Thunar (XFCE)
 

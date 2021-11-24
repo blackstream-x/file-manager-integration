@@ -39,13 +39,15 @@ import subprocess
 #
 
 
-ACTIONS = "actions"
-SCRIPTS = "scripts"
+ACTION = "action"
+SCRIPT = "script"
+
+SCRIPT_REQUIRED_KEYS = {"name", "absolute_path"}
 
 NEMO_ACTION_TEMPLATE = """[Nemo Action]
 Name=${name}
 Comment=${comment}
-Exec=${executable} %F
+Exec=${absolute_path} %F
 Selection=S
 Extensions=${extensions};
 Quote=double
@@ -60,20 +62,70 @@ Actions=${identifier}
 
 [Desktop Action ${identifier}]
 Name=${name}
-Exec=${executable} %F
+Exec=${absolute_path} %F
 """
 
 HELP = dict(
-    name="The desired name of the action",
+    name="The desired name of the menu entry",
     comment="Comment for the action (Nemo, …)",
-    executable="Executable path",
+    absolute_path="Absolute path of the script to integrate",
+    relative_path="Relative path of the script to integrate",
     extensions="Semicolon-separated list of handled file extensions"
     " (Nemo, …)",
     mimetypes="Semicolon-separated list of handled file mime types"
-    " (KDE file managers, …)",
-    identifier="Internal identifier in the desktop file"
-    " (KDE file managers, …)",
+    " (Dolphin, …)",
+    identifier="Internal identifier in the desktop file (Dolphin, …)",
 )
+
+
+#
+# Helper functions
+#
+
+
+def check_target_directory(target_directory_path, options):
+    """Check if the target directory exists,
+    If it does not, and the --force-create-directories option
+    was set, create it.
+    """
+    if not target_directory_path.is_dir():
+        if options.force_create_directories:
+            target_directory_path.mkdir()
+        else:
+            raise ValueError(f"{target_directory_path} not available!")
+        #
+    #
+
+
+def check_target_file(target_file_path, options):
+    """Check if the target file already exists.
+    If it does, is a regular file,
+    and the --force-overwrite option was set,
+    ignore the situation and allow overwriting it.
+    """
+    if target_file_path.exists:
+        if target_file_path.is_file() and options.force_overwrite:
+            return
+        #
+        raise ValueError(f"{target_file_path} already exists!")
+        #
+    #
+
+
+def check_target_symlink(target_link_path, options):
+    """Check if the target symlink already exists.
+    If it does, is a symbolic link,
+    and the --force-overwrite option was set,
+    delete it.
+    """
+    if target_link_path.exists:
+        if target_link_path.is_symlink() and options.force_overwrite:
+            target_link_path.unlink()
+            return
+        #
+        raise ValueError(f"{target_link_path} already exists!")
+        #
+    #
 
 
 #
@@ -81,31 +133,65 @@ HELP = dict(
 #
 
 
+class EnhancedTemplate(string.Template):
+
+    """string.Template subclass aware of the required keys"""
+
+    @property
+    def required_keys(self):
+        """Return the set of keys required by the template"""
+        keys = set()
+        for match_obj in self.pattern.finditer(self.template):
+            named = match_obj.group("named") or match_obj.group("braced")
+            if named is not None:
+                keys.add(named)
+            #
+        #
+        return keys
+
+
 class BaseFileManager:
 
     """File Manager base class"""
 
     name = "Unknown File Manager"
-    config_path = pathlib.Path(".local/share/unknown")
-    actions_subdir = "actions"
-    scripts_subdir = "scripts"
+    config_directory = ".local/share/unknown-file-manager"
+    subdirs = {ACTION: "actions", SCRIPT: "scripts"}
     capabilities = ()
     action_template = ""
     executable = "/bin/false"
 
     def __init__(self):
-        """Initinalize attributes"""
-        if ACTIONS in self.capabilities:
-            self.actions_path = self.config_path / self.actions_subdir
+        """Initialize attributes"""
+        self.template = EnhancedTemplate(self.action_template)
+        self.config_path = pathlib.Path.home() / self.config_directory
+
+    def check_availability(self):
+        """Check installation"""
+        if not self.is_installed():
+            raise ValueError(f"{self.name} is not installed!")
         #
-        if SCRIPTS in self.capabilities:
-            self.scripts_path = self.config_path / self.scripts_subdir
+        if not self.config_path.is_dir():
+            raise ValueError(
+                f"Configuration path for {self.name} is not available!"
+            )
         #
 
-    @property
-    def template(self):
-        """Return a string.Template object from self.action_template"""
-        return string.Template(self.action_template)
+    def install(self, target, configuration, options):
+        """Execute the install method defined in the subclass"""
+        if target not in self.capabilities:
+            raise ValueError(f"{target} not supported in {self.name}!")
+        #
+        self.check_availability()
+        target_directory_path = self.config_path / self.subdirs[target]
+        try:
+            install_method = getattr(self, f"install_{target}")
+        except AttributeError as error:
+            raise NotImplementedError from error
+        #
+        logging.debug("File manager: %s", self.name.title())
+        logging.debug("Integration target: %s", target)
+        install_method(target_directory_path, configuration, options)
 
     def is_installed(self):
         """Check if the file manager is installed"""
@@ -121,67 +207,43 @@ class BaseFileManager:
         #
         return True
 
-    def required_keys(self):
-        """Return a list of keys required by the template"""
-        keys = []
-        for match_obj in self.template.pattern.finditer(self.action_template):
-            named = match_obj.group("named") or match_obj.group("braced")
-            if named is not None:
-                keys.append(named)
-            #
+    def required_keys(self, target):
+        """Required keys for the target"""
+        if target == SCRIPT:
+            return SCRIPT_REQUIRED_KEYS
         #
-        return keys
-
-    def check_installation(self):
-        """Check installation"""
-        if not self.config_path.is_dir():
-            raise ValueError(f"{self.name} is probably not installed!")
-        #
-
-    def check_actions_support(self):
-        """Check actions support"""
-        if ACTIONS not in self.capabilities:
-            raise ValueError(f"Actions not supported in {self.name}!")
-        #
-        self.check_installation()
-
-    def check_scripts_support(self):
-        """Check scripts support"""
-        if SCRIPTS not in self.capabilities:
-            raise ValueError(f"Scripts not supported in {self.name}!")
-        #
-        self.check_installation()
+        return self.template.required_keys
 
 
 class Nautilus(BaseFileManager):
 
     """Nautilus file manager, also a base class for others"""
 
-    name = "Nautilus"
-    config_path = pathlib.Path(".local/share/nautilus")
-    capabilities = (SCRIPTS,)
+    name = "nautilus"
+    config_directory = ".local/share/nautilus"
+    capabilities = (SCRIPT,)
     executable = "/usr/bin/nautilus"
 
-    def install_script(self, absolute_source_path, **options):
-        """Install as Nautilus script"""
-        self.check_scripts_support()
-        if not self.scripts_path.is_dir():
-            if options.get('force_create_directories', False):
-                self.scripts_path.mkdir()
-            else:
-                raise ValueError(f"{self.scripts_path} not available!")
-            #
+    @staticmethod
+    def install_script(target_directory_path, configuration, options):
+        """Install as Nautilus script in target_path"""
+        check_target_directory(target_directory_path, options)
+        source_path = pathlib.Path(
+            os.path.realpath(configuration["absolute_path"])
+        )
+        if source_path.is_symlink():
+            source_path = source_path.readlink()
         #
-        display_name = options['display_name']
-        target_link_path = self.scripts_path / display_name
+        if not source_path.is_file():
+            raise ValueError(f"{source_path} does not exist!")
+        #
+        target_link_path = target_directory_path / configuration["name"]
         logging.debug("Target path: %s", target_link_path)
-        if target_link_path.exists():
-            raise ValueError(f"{target_link_path} already exists!")
-        #
-        for single_path in self.scripts_path.glob("*"):
+        check_target_symlink(target_link_path, options)
+        for single_path in target_directory_path.glob("*"):
             if single_path.is_symlink():
-                if single_path.readlink() == absolute_source_path:
-                    if options.get('force_rename_existing', False):
+                if single_path.readlink() == source_path:
+                    if options.force_rename_existing:
                         os.rename(single_path, target_link_path)
                         return
                     #
@@ -193,83 +255,71 @@ class Nautilus(BaseFileManager):
                 #
             #
         #
-        os.symlink(absolute_source_path, target_link_path)
+        os.symlink(source_path, target_link_path)
 
 
 class Caja(Nautilus):
 
     """Caja file manager (Nautilus based)"""
 
-    name = "Caja"
+    name = "caja"
     config_path = pathlib.Path(".local/share/caja")
-    capabilities = (ACTIONS, SCRIPTS)
-
-    def install_action(self, source_path, **options):
-        """Install as action"""
-        raise NotImplementedError
+    # capabilities = (ACTION, SCRIPT)
 
 
 class Nemo(Nautilus):
 
     """Nemo file manager (Nautilus based)"""
 
-    name = "Nemo"
+    name = "nemo"
     config_path = pathlib.Path(".local/share/nemo")
-    capabilities = (ACTIONS, SCRIPTS)
+    capabilities = (ACTION, SCRIPT)
     action_template = NEMO_ACTION_TEMPLATE
     executable = "/usr/bin/nemo"
 
-    def install_action(self, source_path, **options):
-        """Install as action"""
-        self.check_actions_support()
-        action_name = options["name"]
-        target_file = f"{action_name}.nemo_action"
-        template = string.Template(NEMO_ACTION_TEMPLATE)
-        options["exec"] = str(source_path)
-        with open(
-            self.actions_path / target_file,
-            mode="wt",
+    def install_action(self, target_directory_path, configuration, options):
+        """Install as Nemo action in tagret path"""
+        check_target_directory(target_directory_path, options)
+        action_name = configuration["name"]
+        target_file_path = target_directory_path / f"{action_name}.nemo_action"
+        check_target_file(target_file_path, options)
+        target_file_path.write_text(
+            self.template.safe_substitute(configuration),
             encoding="utf-8",
-        ) as output_file:
-            output_file.write(template.safe_substitute(options))
-        #
+        )
 
 
 class KdefileManager(BaseFileManager):
 
     """KDE file manager"""
 
-    name = "KDE file manager"
-    capabilities = (ACTIONS,)
+    name = "dolphin"
+    capabilities = (ACTION,)
     action_template = KFM_ACTION_TEMPLATE
-
-    def install_action(self, source_path, **options):
-        """Install as action"""
-        raise NotImplementedError
 
 
 class PcManFm(BaseFileManager):
 
     """PCManFM file manager"""
 
-    name = "PCManFM"
-    capabilities = (ACTIONS,)
-
-    def install_action(self, source_path, **options):
-        """Install as action"""
-        raise NotImplementedError
+    name = "pcmanfm"
+    capabilities = (ACTION,)
 
 
 class Thunar(BaseFileManager):
 
     """Thunar file manager"""
 
-    name = "Thunar"
-    capabilities = (ACTIONS,)
+    name = "thunar"
+    capabilities = (ACTION,)
 
-    def install_action(self, source_path, **options):
-        """Install as action"""
-        raise NotImplementedError
+
+#
+# Constant: Supported file managers
+#
+
+
+SUPPORTED = (Nautilus, Nemo)
 
 
 # vim: fileencoding=utf-8 ts=4 sts=4 sw=4 autoindent expandtab syntax=python:
