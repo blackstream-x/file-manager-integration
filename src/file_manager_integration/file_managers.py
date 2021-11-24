@@ -103,7 +103,7 @@ def check_target_file(target_file_path, options):
     and the --force-overwrite option was set,
     ignore the situation and allow overwriting it.
     """
-    if target_file_path.exists:
+    if target_file_path.exists():
         if target_file_path.is_file() and options.force_overwrite:
             return
         #
@@ -118,7 +118,7 @@ def check_target_symlink(target_link_path, options):
     and the --force-overwrite option was set,
     delete it.
     """
-    if target_link_path.exists:
+    if target_link_path.exists():
         if target_link_path.is_symlink() and options.force_overwrite:
             target_link_path.unlink()
             return
