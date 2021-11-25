@@ -16,8 +16,7 @@ pip install file-manager-integration
 ```
 
 I recommend either installing into a virtual environment or doing a
-[user install](https://pip.pypa.io/en/stable/user_guide/#user-installs)
-see the following example:
+[user install](https://pip.pypa.io/en/stable/user_guide/#user-installs):
 
 ```
 pip install --user file-manager-integration
