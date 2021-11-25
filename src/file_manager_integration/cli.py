@@ -199,10 +199,11 @@ def install(arguments):
         return RETURNCODE_ERROR
     #
     LOGGER.info(
-        "Installed %s as a %s %s.",
+        "Installed %s\nas a %s %s (%r).",
         absolute_path,
-        file_manager.name,
+        file_manager.name.title(),
         arguments.integration_mode,
+        configuration["name"],
     )
     return RETURNCODE_OK
 

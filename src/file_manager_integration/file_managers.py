@@ -267,7 +267,7 @@ class Caja(Nautilus):
     """Caja file manager (Nautilus based)"""
 
     name = "caja"
-    config_path = pathlib.Path(".local/share/caja")
+    config_directory = ".local/share/caja"
     # capabilities = (ACTION, SCRIPT)
 
 
@@ -276,7 +276,7 @@ class Nemo(Nautilus):
     """Nemo file manager (Nautilus based)"""
 
     name = "nemo"
-    config_path = pathlib.Path(".local/share/nemo")
+    config_directory = ".local/share/nemo"
     capabilities = (ACTION, SCRIPT)
     action_template = NEMO_ACTION_TEMPLATE
     executable = "/usr/bin/nemo"

@@ -1,6 +1,6 @@
 # file-manager-integration
 
-This is a small utility for integrating scripts into various Unix/Linux file managers.
+A small utility for integrating scripts into various Unix/Linux file managers.
 
 It uses a file named `file_manager_integration.json` specifying the script
 and the parameters of the file manager integration.
