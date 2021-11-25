@@ -178,24 +178,32 @@ def install(arguments):
         )
         return RETURNCODE_ERROR
     #
-    if not arguments.target:
-        arguments.target = file_manager.capabilities[0]
+    if not arguments.integration_mode:
+        arguments.integration_mode = file_manager.capabilities[0]
     #
-    if arguments.target not in file_manager.capabilities:
+    if arguments.integration_mode not in file_manager.capabilities:
         LOGGER.error(
             "%r integration is not a supported in %s!",
-            arguments.target,
+            arguments.integration_mode,
             arguments.file_manager,
         )
         return RETURNCODE_ERROR
     #
     LOGGER.separator(level=logging.DEBUG)
     try:
-        file_manager.install(arguments.target, configuration, arguments)
+        file_manager.install(
+            arguments.integration_mode, configuration, arguments
+        )
     except ValueError as error:
         LOGGER.error(str(error))
         return RETURNCODE_ERROR
     #
+    LOGGER.info(
+        "Installed %s as a %s %s.",
+        absolute_path,
+        file_manager.name,
+        arguments.integration_mode,
+    )
     return RETURNCODE_OK
 
 
@@ -306,9 +314,9 @@ def main():
         help="the file manager to integrate the script with",
     )
     parser_install.add_argument(
-        "target",
+        "integration_mode",
         nargs="?",
-        help=f"the integration target (eg. {file_managers.ACTION}"
+        help=f"the integration mode (eg. {file_managers.ACTION}"
         f" or {file_managers.SCRIPT})",
     )
     #

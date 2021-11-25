@@ -177,20 +177,24 @@ class BaseFileManager:
             )
         #
 
-    def install(self, target, configuration, options):
+    def install(self, integration_mode, configuration, options):
         """Execute the install method defined in the subclass"""
-        if target not in self.capabilities:
-            raise ValueError(f"{target} not supported in {self.name}!")
+        if integration_mode not in self.capabilities:
+            raise ValueError(
+                f"{integration_mode} not supported in {self.name}!"
+            )
         #
         self.check_availability()
-        target_directory_path = self.config_path / self.subdirs[target]
+        target_directory_path = (
+            self.config_path / self.subdirs[integration_mode]
+        )
         try:
-            install_method = getattr(self, f"install_{target}")
+            install_method = getattr(self, f"install_{integration_mode}")
         except AttributeError as error:
             raise NotImplementedError from error
         #
         logging.debug("File manager: %s", self.name.title())
-        logging.debug("Integration target: %s", target)
+        logging.debug("Integration mode: %s", integration_mode)
         install_method(target_directory_path, configuration, options)
 
     def is_installed(self):
@@ -207,9 +211,9 @@ class BaseFileManager:
         #
         return True
 
-    def required_keys(self, target):
-        """Required keys for the target"""
-        if target == SCRIPT:
+    def required_keys(self, integration_mode):
+        """Required keys for the integration_mode"""
+        if integration_mode == SCRIPT:
             return SCRIPT_REQUIRED_KEYS
         #
         return self.template.required_keys
