@@ -72,15 +72,21 @@ def _load_configuration():
     #
 
 
-def _question_all_items(configuration, arguments):
+def _question_all_items(configuration, arguments, required_keys=None):
     """Question all configuration items interactively.
     Return the new configuration.
+    Specify a sequence of required keys,
+    or all defined keys will be asked.
     """
+    if not required_keys:
+        required_keys = list(file_managers.HELP)
+    #
     current_path = pathlib.Path.cwd()
-    for (key, description) in file_managers.HELP.items():
+    for key in required_keys:
         if key == "absolute_path":
             continue
         #
+        description = file_managers.HELP[key]
         new_value = None
         while True:
             try:
@@ -113,6 +119,9 @@ def _question_all_items(configuration, arguments):
             )
         #
         LOGGER.separator()
+        if new_value is None:
+            continue
+        #
         LOGGER.info("%s=%r", key, new_value)
         configuration[key] = new_value
         LOGGER.separator()

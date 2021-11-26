@@ -48,6 +48,7 @@ NEMO_ACTION_TEMPLATE = """[Nemo Action]
 Name=${name}
 Comment=${comment}
 Exec=${absolute_path} %F
+Icon-Name=${nemo_icon_name}
 Selection=S
 Extensions=${extensions};
 Quote=double
@@ -68,6 +69,7 @@ Exec=${absolute_path} %F
 HELP = dict(
     name="The desired name of the menu entry",
     comment="Comment for the action (Nemo, …)",
+    nemo_icon_name="Icon name for Nemo",
     absolute_path="Absolute path of the script to integrate",
     relative_path="Relative path of the script to integrate",
     extensions="Semicolon-separated list of handled file extensions"
@@ -211,8 +213,8 @@ class BaseFileManager:
         #
         return True
 
-    def required_keys(self, integration_mode):
-        """Required keys for the integration_mode"""
+    def get_required_keys(self, integration_mode):
+        """Return the required keys for the integration_mode"""
         if integration_mode == SCRIPT:
             return SCRIPT_REQUIRED_KEYS
         #
