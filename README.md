@@ -1,5 +1,9 @@
 # file-manager-integration
 
+[![file_manager_integration on PyPI](https://img.shields.io/pypi/v/file_manager_integration)](https://pypi.org/project/file-manager-integration/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 A small utility for integrating scripts into various Unix/Linux file managers.
 
 It uses a file named `file_manager_integration.json` specifying the script
