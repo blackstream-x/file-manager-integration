@@ -66,17 +66,33 @@ Name=${name}
 Exec=${absolute_path} %F
 """
 
+CAJA_ACTION_TEMPLATE = """[Desktop Entry]
+Type=Action
+Description=${comment}
+Tooltip=${comment}
+Name=${name}
+Profiles=${identifier};
+Icon=${caja_icon_name}
+
+[X-Action-Profile ${identifier}]
+OnlyShowIn=MATE;
+MimeTypes=${mimetypes};
+Exec=${absolute_path} %F
+Name=${name}
+"""
+
 HELP = dict(
     name="The desired name of the menu entry",
     comment="Comment for the action (Nemo, …)",
     nemo_icon_name="Icon name for Nemo",
+    caja_icon_name="Icon name for Caja",
     absolute_path="Absolute path of the script to integrate",
     relative_path="Relative path of the script to integrate",
     extensions="Semicolon-separated list of handled file extensions"
     " (Nemo, …)",
     mimetypes="Semicolon-separated list of handled file mime types"
     " (Dolphin, …)",
-    identifier="Internal identifier in the desktop file (Dolphin, …)",
+    identifier="Internal identifier in the desktop file (Caja, Dolphin, …)",
 )
 
 
@@ -159,6 +175,7 @@ class BaseFileManager:
     name = "Unknown File Manager"
     config_directory = ".local/share/unknown-file-manager"
     subdirs = {ACTION: "actions", SCRIPT: "scripts"}
+    explicit_directories = {}
     capabilities = ()
     action_template = ""
     executable = "/bin/false"
@@ -187,9 +204,15 @@ class BaseFileManager:
             )
         #
         self.check_availability()
-        target_directory_path = (
-            self.config_path / self.subdirs[integration_mode]
-        )
+        try:
+            explicit_subpath = self.explicit_directories[integration_mode]
+        except KeyError:
+            target_directory_path = (
+                self.config_path / self.subdirs[integration_mode]
+            )
+        else:
+            target_directory_path = pathlib.Path.home() / explicit_subpath
+        #
         try:
             install_method = getattr(self, f"install_{integration_mode}")
         except AttributeError as error:
@@ -269,8 +292,22 @@ class Caja(Nautilus):
     """Caja file manager (Nautilus based)"""
 
     name = "caja"
-    config_directory = ".local/share/caja"
-    # capabilities = (ACTION, SCRIPT)
+    config_directory = ".config/caja"
+    capabilities = (ACTION, SCRIPT)
+    explicit_directories = {ACTION: ".local/share/file-manager/actions"}
+    action_template = CAJA_ACTION_TEMPLATE
+    executable = "/usr/bin/caja"
+
+    def install_action(self, target_directory_path, configuration, options):
+        """Install as Nemo action in target path"""
+        check_target_directory(target_directory_path, options)
+        action_name = configuration["name"]
+        target_file_path = target_directory_path / f"{action_name}.desktop"
+        check_target_file(target_file_path, options)
+        target_file_path.write_text(
+            self.template.safe_substitute(configuration),
+            encoding="utf-8",
+        )
 
 
 class Nemo(Nautilus):
@@ -284,7 +321,7 @@ class Nemo(Nautilus):
     executable = "/usr/bin/nemo"
 
     def install_action(self, target_directory_path, configuration, options):
-        """Install as Nemo action in tagret path"""
+        """Install as Nemo action in target path"""
         check_target_directory(target_directory_path, options)
         action_name = configuration["name"]
         target_file_path = target_directory_path / f"{action_name}.nemo_action"
