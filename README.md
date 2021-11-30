@@ -107,12 +107,12 @@ The scripts **should** provide a graphical user interface.
 
 ### implemented
 
+- Caja (MATE)
 - Nautilus (GNOME)
 - Nemo (Cinnamon)
 
 ### planned support
 
-- Caja (MATE)
 - KDE file manager
 - PCManFM (LXDE)
 - Thunar (XFCE)
