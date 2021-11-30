@@ -75,7 +75,6 @@ Profiles=${identifier};
 Icon=${caja_icon_name}
 
 [X-Action-Profile ${identifier}]
-OnlyShowIn=MATE;
 MimeTypes=${mimetypes};
 Exec=${absolute_path} %F
 Name=${name}
@@ -362,7 +361,7 @@ class Thunar(BaseFileManager):
 #
 
 
-SUPPORTED = (Nautilus, Nemo)
+SUPPORTED = (Caja, Nautilus, Nemo)
 
 
 # vim: fileencoding=utf-8 ts=4 sts=4 sw=4 autoindent expandtab syntax=python:
